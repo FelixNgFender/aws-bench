@@ -16,7 +16,10 @@ the environment. When that token is absent this behaves exactly like harbor's
 Codex (OpenAI auth).
 
 Region: pass it with ``-ae AWS_REGION=us-east-2`` (API-key auth requires a
-Region). The host ``AWS_REGION`` is auto-forwarded as a fallback.
+Region). The host ``AWS_REGION`` is auto-forwarded as a fallback. It is pinned
+in ``config.toml`` as ``model_providers.amazon-bedrock.aws.region``, because an
+aws-bench trial sets the agent's ``AWS_REGION`` to the task's Region, and the
+model may not be served there (``bedrock-mantle`` returns 404).
 
 Like Claude Code, marketplaces and plugins can be supplied via agent kwargs::
 
@@ -101,6 +104,11 @@ class Codex(_HarborCodex):
                 "added when a plugin from it is installed"
             )
         super().__init__(logs_dir, *args, **kwargs)
+        # Read now because an aws-bench trial later overrides AWS_REGION to the task's Region
+        # for the agent's AWS calls, which may not serve the model.
+        self._bedrock_region = (
+            self._extra_env.get("AWS_REGION") or os.environ.get("AWS_REGION") or _DEFAULT_AWS_REGION
+        )
 
     async def install(self, environment: BaseEnvironment) -> None:
         """Install Codex and, when plugins are requested, Git for cloning."""
@@ -160,7 +168,7 @@ class Codex(_HarborCodex):
         token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "").strip()
         self._extra_env.setdefault("AWS_BEARER_TOKEN_BEDROCK", token)
         # Bedrock requires a Region. Honor -ae / host AWS_REGION, else default.
-        self._extra_env.setdefault("AWS_REGION", os.environ.get("AWS_REGION", _DEFAULT_AWS_REGION))
+        self._extra_env.setdefault("AWS_REGION", self._bedrock_region)
 
     async def _write_bedrock_provider_config(self, environment: BaseEnvironment) -> None:
         """Write ``model_provider = "amazon-bedrock"`` into the container config.
@@ -175,7 +183,12 @@ class Codex(_HarborCodex):
         own mkdir having run yet (it is idempotent with harbor's).
         """
         remote_codex_home = self._REMOTE_CODEX_HOME.as_posix()
-        provider_block = 'model_provider = "amazon-bedrock"\n'
+        # Codex prefers this key over AWS_REGION, which in a trial is the task's Region.
+        provider_block = (
+            'model_provider = "amazon-bedrock"\n'
+            "model_providers.amazon-bedrock.aws.region = "
+            f"{_toml_basic_string(self._bedrock_region)}\n"
+        )
         await self.exec_as_agent(
             environment,
             command=(
