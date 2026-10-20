@@ -86,9 +86,9 @@ def is_service_managed_studio_stack(identifier: str) -> bool:
 
     These ``environment-*-flink-studio`` stacks are created and owned by a KDA v2
     Studio application. AWS removes them asynchronously when that application is
-    deleted, and a direct ``DeleteStack`` goes terminal ``DELETE_FAILED`` — so they
-    must be torn down by deleting the owning application (via its cleanup handler),
-    never deleted directly as a whole stack. Accepts a stack name or ARN.
+    deleted, and a direct ``DeleteStack`` goes terminal ``DELETE_FAILED`` — so
+    they must be torn down by deleting the application and waiting for the
+    auto-removal, never deleted directly. Accepts a stack name or ARN.
     """
     return bool(_STUDIO_STACK_NAME_RE.match(_stack_name_from_identifier(identifier)))
 
