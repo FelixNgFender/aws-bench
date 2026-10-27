@@ -202,7 +202,7 @@ desired_value = 8
 ```
 
 Field rules:
-- **`account_tags`** — exactly one entry in v1. Becomes the AWS profile name inside the container.
+- **`account_tags`** — one or more entries, one account each. Each becomes an AWS profile name inside the container; the first is the default profile.
 - **`regions`** — must be non-empty. Every `[[quotas]]` region must appear here.
 - **`[[quotas]]`** — one entry per (account, region, quota). Each is an idempotent service-quota request submitted by `aws-bench env init`.
 
@@ -348,6 +348,7 @@ The TOML file also specifies environment variables for different stages (e.g., `
 Key sections:
 - **`[scenario]`** — links this task to its scenario. `scenario_id` must match a scenario's `[scenario].name`.
 - **`agent_role_name`** — the IAM role the framework assumes on behalf of the agent. This role must be created by your scenario's CDK code.
+- **`agent_account_tags`** — optional: the scenario's account tags the agent gets credentials for, the first as its default profile. Unset means all of them. Use it to keep the agent out of an account, e.g. one that injects faults: `agent_account_tags = ["PRIMARY"]`. The verifier, `pre_invoke` and `post_invoke` always get every account.
 - **`[verifier.env]`** — env vars passed to the test script. Use `{{placeholder}}` syntax for values resolved from CloudFormation outputs at runtime. Other stages (`[pre_invoke.env]`, `[post_invoke.env]`, `[reset.env]`, `[solution.env]`) also support placeholders.
 
 ### Writing `instruction.md`

@@ -712,9 +712,8 @@ async def test_create_collects_exports_from_every_scenario_account(tmp_path, moc
     A scenario maps to one account per tag. ``create`` must build the
     ``collect_account_exports`` targets from all of them (``mapping_for``), so the
     per-tag export slice in ``_build_trial_config`` is populated for every tag.
-    Stubs the resolved environment to map the scenario to TWO accounts (the
-    manifest still validates a single tag; the stub bypasses that gate to exercise
-    the multi-account collection path) and asserts both account ids are queried.
+    Stubs the resolved environment to map the scenario to TWO accounts and asserts
+    both account ids are queried.
     """
     from aws_bench.account_management.models import OrgInfo, ScenarioAccount, TestEnvironment
     from aws_bench.cli.job_config import AwsBenchJobConfig
@@ -863,3 +862,28 @@ def test_init_logger_debug_sets_console_to_debug(tmp_path):
         assert job._aws_console_handler.level == logging.DEBUG
     finally:
         job._close_logger_handlers()
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_undeclared_agent_account_tags(tmp_path, mocker):
+    """agent_account_tags naming a tag the scenario doesn't declare fails before any trial."""
+    from aws_bench.cli.job_config import AwsBenchJobConfig
+    from aws_bench.dataset.config import AwsBenchDatasetConfig
+    from aws_bench.dataset.exceptions import ScenarioReferenceError
+
+    _stub_create_aws_seams(mocker)
+    tasks_root = tmp_path / "tasks"
+    task_dir = _make_task_dir(tasks_root / "t1", task_name="aws-bench/t1", scenario_id="ec2-small")
+    toml = task_dir / "task.toml"
+    toml.write_text(toml.read_text() + 'agent_account_tags = ["INJECTOR"]\n')
+    scenario_root = tmp_path / "scenarios"
+    _make_scenario_dir(scenario_root / "ec2-small", "ec2-small")
+
+    config = AwsBenchJobConfig(
+        env_name="awsbench-ou",
+        jobs_dir=tmp_path / "jobs",
+        job_name="run-0",
+        dataset=AwsBenchDatasetConfig(path=tasks_root, scenarios_path=scenario_root),
+    )
+    with pytest.raises(ScenarioReferenceError, match=r"agent_account_tags \['INJECTOR'\]"):
+        await AwsBenchJob.create(config)

@@ -87,7 +87,9 @@ def _scenario_ref(**roles):
         RoleType.PRE_INVOKE: roles.get("pre_invoke"),
         RoleType.POST_INVOKE: roles.get("post_invoke"),
     }
-    return SimpleNamespace(role_name=lambda rt: role_map[rt])
+    return SimpleNamespace(
+        role_name=lambda rt: role_map[rt], agent_account_tags=roles.get("agent_account_tags")
+    )
 
 
 def _phase(timeout_sec=None, env=None):
@@ -349,6 +351,28 @@ async def test_run_agent_phase_sets_aws_profile_to_first_tag(tmp_path, fake_cred
     mocker.patch.object(Trial, "_run_agent_phase", fake_super_phase)
     await trial._run_agent_phase(target=MagicMock(), instruction="x", timeout_sec=None, user=None)
     assert seen["AWS_PROFILE"] == "PRIMARY"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("role_type", "files", "profile"),
+    [
+        (RoleType.AGENT, ["INJECTOR.json"], "INJECTOR"),
+        (RoleType.PRE_INVOKE, ["INJECTOR.json", "PRIMARY.json"], "PRIMARY"),
+    ],
+)
+async def test_agent_account_tags_limit_only_the_agent(
+    tmp_path, fake_creds, shell_environment, role_type, files, profile
+):
+    """Only the agent is limited to agent_account_tags; the first is its default profile."""
+    trial = _make_trial(tmp_path)
+    trial.agent_environment = shell_environment
+    trial.config.account_mapping = {"PRIMARY": "111111111111", "INJECTOR": "222222222222"}
+    trial.task.config.scenario = _scenario_ref(agent_account_tags=["INJECTOR"])  # type: ignore[assignment]
+
+    async with trial._staged_credentials(role_type) as cred_env:
+        assert sorted(p.name for p in (tmp_path / ".aws/creds").iterdir()) == files
+        assert cred_env["AWS_PROFILE"] == profile
 
 
 @pytest.mark.asyncio

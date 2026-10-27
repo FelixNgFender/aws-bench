@@ -182,6 +182,11 @@ def test_scenario_ref_role_name_none_when_unset():
     assert all(ref.role_name(rt) is None for rt in RoleType)
 
 
+def test_scenario_ref_agent_account_tags_reject_empty():
+    with pytest.raises(ValidationError):
+        ScenarioRef(scenario_id="ec2-small", agent_account_tags=[])
+
+
 # ── AwsBenchTask construction ──
 
 

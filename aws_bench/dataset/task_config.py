@@ -52,6 +52,12 @@ class ScenarioRef(BaseModel):
 
     scenario_id: str
     agent_role_name: str | None = None
+    agent_account_tags: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        description="""Scenario account tags the agent gets credentials for, the first as its
+        default profile. Unset means all tags; the other phases always get all tags.""",
+    )
     verifier_role_name: str | None = None
     pre_invoke_role_name: str | None = None
     post_invoke_role_name: str | None = None

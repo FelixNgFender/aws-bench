@@ -149,6 +149,15 @@ class AwsBenchJob(Job):
                 f"Tasks reference scenarios not present in the selected dataset: "
                 f"{sorted(unknown)}. Available scenarios: {sorted(pairs_by_name)}."
             )
+        for _, task in task_pairs:
+            ref = task.config.scenario
+            declared = pairs_by_name[ref.scenario_id][1].manifest.scenario.account_tags
+            undeclared = set(ref.agent_account_tags or ()) - set(declared)
+            if undeclared:
+                raise ScenarioReferenceError(
+                    f"Task '{task.name}' agent_account_tags {sorted(undeclared)} are not "
+                    f"account_tags of scenario '{ref.scenario_id}': {declared}."
+                )
         # Sorted so the downstream account-export fetch order and the persisted
         # config are stable across runs (set iteration order is not).
         run_pairs = {name: pairs_by_name[name] for name in sorted(referenced)}

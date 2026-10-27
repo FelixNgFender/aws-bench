@@ -48,9 +48,8 @@ class ScenarioInfo(BaseModel):
                 )
         if len(set(value)) != len(value):
             raise ValueError("account_tags must not contain duplicates")
-        # Multi-account per scenario is a future extension.
-        if len(value) != 1:
-            raise ValueError("account_tags must have exactly one entry")
+        if not value:
+            raise ValueError("account_tags must have at least one entry")
         return value
 
     @field_validator("regions")
