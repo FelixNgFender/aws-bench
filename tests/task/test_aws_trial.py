@@ -161,6 +161,7 @@ def _make_trial(
     # __init__ is bypassed here; set the per-trial state it would establish.
     trial._aws_placeholders = {tag: dict(v) for tag, v in (exports or {}).items()}
     trial._aws_post_invoke_done = False
+    trial._aws_post_invoke_ok = False
     # __init__ builds one AccountManager and reuses it for the _prepare gate.
     # Bypassed here, so establish it too — resolves to the autouse no_contamination
     # mock (clean by default); the gate tests inject their own onto the instance.
@@ -911,6 +912,7 @@ async def test_stop_runs_post_invoke_before_super_stop(tmp_path, fake_creds, moc
     mocker.patch.object(Trial, "_stop_agent_environment", fake_super_stop)
     await trial._stop_agent_environment()
     assert order == ["post_invoke", "stop_env"]
+    assert trial._aws_post_invoke_ok is True
 
 
 @pytest.mark.asyncio
@@ -984,6 +986,7 @@ async def test_post_invoke_failure_records_exception_and_still_stops(tmp_path, f
 
     recorded.assert_called_once_with(boom)  # failure surfaced on the result
     stopped.assert_awaited_once()  # teardown still ran
+    assert trial._aws_post_invoke_ok is False  # the framework reset must still run
 
 
 @pytest.mark.asyncio
@@ -1036,7 +1039,7 @@ def test_init_sets_aws_attrs_before_base_init(tmp_path, mocker):
 # --- post-trial reset -------------------------------------------------------
 
 
-def _reset_ready_trial(tmp_path, *, mode):
+def _reset_ready_trial(tmp_path, *, mode, skip_framework_reset=False, post_invoke_ok=False):
     """A trial with just the fields _reset_scenario_account / run read."""
     from aws_bench.scenario.locator import ScenarioConfig
 
@@ -1049,9 +1052,44 @@ def _reset_ready_trial(tmp_path, *, mode):
         timeout_multiplier=1.0,
         trial_name="trial-0",
     )
+    trial.task = SimpleNamespace(  # type: ignore[assignment]
+        config=SimpleNamespace(
+            concurrency=SimpleNamespace(skip_framework_reset=skip_framework_reset)
+        )
+    )
+    trial._aws_post_invoke_ok = post_invoke_ok
     trial.paths = SimpleNamespace(trial_dir=tmp_path / "trial")  # type: ignore[assignment]
     trial.logger = MagicMock()
     return trial
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("flag", "post_invoke_ok", "skipped"),
+    [(True, True, True), (True, False, False), (False, True, False)],
+)
+async def test_reset_skips_framework_reset_only_after_post_invoke_succeeds(
+    tmp_path, mocker, flag, post_invoke_ok, skipped
+):
+    """The framework reset is skipped only when the task sets the flag and post_invoke passed."""
+    from aws_bench.dataset.task_config import ConcurrencyMode
+
+    trial = _reset_ready_trial(
+        tmp_path,
+        mode=ConcurrencyMode.MUTATING,
+        skip_framework_reset=flag,
+        post_invoke_ok=post_invoke_ok,
+    )
+    scenario_trial = MagicMock()
+    scenario_trial.run = AsyncMock(return_value=SimpleNamespace(success=True))
+    create = mocker.patch(
+        "aws_bench.task.aws_trial.ScenarioTrial.create", AsyncMock(return_value=scenario_trial)
+    )
+    mocker.patch("aws_bench.task.aws_trial.CredentialProvider.get", return_value="CREDS")
+
+    await trial._reset_scenario_account()
+
+    assert create.call_args.args[0].skip_framework_reset is skipped
 
 
 @pytest.mark.asyncio

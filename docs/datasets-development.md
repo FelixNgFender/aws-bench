@@ -348,6 +348,7 @@ The TOML file also specifies environment variables for different stages (e.g., `
 Key sections:
 - **`[scenario]`** — links this task to its scenario. `scenario_id` must match a scenario's `[scenario].name`.
 - **`agent_role_name`** — the IAM role the framework assumes on behalf of the agent. This role must be created by your scenario's CDK code.
+- **`[concurrency]`** — `mode = "mutating"` (default) gives each trial the scenario account to itself and resets the account after it; `"read-only"` trials share the account and skip the reset. A mutating task can set `skip_framework_reset = true` to skip the framework's account scan, drift check and cleanup after a trial whose `post_invoke` ran and exited 0. The scenario's `reset.sh` still runs, and any other outcome gets the full reset. Set it only if your `post_invoke` reverts *and* verifies everything the trial changed.
 - **`[verifier.env]`** — env vars passed to the test script. Use `{{placeholder}}` syntax for values resolved from CloudFormation outputs at runtime. Other stages (`[pre_invoke.env]`, `[post_invoke.env]`, `[reset.env]`, `[solution.env]`) also support placeholders.
 
 ### Writing `instruction.md`

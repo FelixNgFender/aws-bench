@@ -549,7 +549,10 @@ class ScenarioTrial:
         elif phase == ScenarioPhase.VERIFY:
             await self._run_verify()
         elif phase == ScenarioPhase.RESET:
-            await self._run_reset()
+            if self._config.skip_framework_reset:
+                logger.info("Skipping the framework reset: post_invoke restored the account")
+            else:
+                await self._run_reset()
         elif phase == ScenarioPhase.CLEANUP:
             await self._run_cleanup(script_failed=script_failed)
 

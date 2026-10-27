@@ -122,6 +122,8 @@ class AwsBenchSingleStepTrial(SingleStepTrial):
         """
         self._aws_placeholders: dict[str, dict[str, str]] = {}
         self._aws_post_invoke_done = False
+        # Set only when post_invoke ran to completion and exited 0.
+        self._aws_post_invoke_ok = False
         # Gates post-invoke: skipped if setup never produced a running container.
         self._agent_container_started = False
         self._account_manager = AccountManager()
@@ -178,6 +180,9 @@ class AwsBenchSingleStepTrial(SingleStepTrial):
             account_mapping=self.config.account_mapping,
             timeout_multiplier=self.config.timeout_multiplier,
             labels={_ROLE_LABEL_KEY: _SCENARIO_RESET_ROLE},
+            skip_framework_reset=(
+                self.task.config.concurrency.skip_framework_reset and self._aws_post_invoke_ok
+            ),
         )
         try:
             trial = await ScenarioTrial.create(reset_config, CredentialProvider.get())
@@ -471,6 +476,7 @@ class AwsBenchSingleStepTrial(SingleStepTrial):
                         role_type=RoleType.POST_INVOKE,
                         phase=self.task.config.post_invoke,
                     )
+                    self._aws_post_invoke_ok = True
                 except (asyncio.CancelledError, OperationCancelled) as e:
                     self.logger.warning(
                         "Post-invoke interrupted by cancellation; the "
