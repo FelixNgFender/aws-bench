@@ -33,7 +33,7 @@ class ScenarioInfo(BaseModel):
     description: str = ""
     authors: list[Author] = Field(default_factory=list)
     keywords: list[str] = Field(default_factory=list)
-    account_tags: list[str]
+    account_tags: list[str] = Field(min_length=1)
     regions: list[str]
 
     @field_validator("account_tags")
@@ -48,8 +48,6 @@ class ScenarioInfo(BaseModel):
                 )
         if len(set(value)) != len(value):
             raise ValueError("account_tags must not contain duplicates")
-        if not value:
-            raise ValueError("account_tags must have at least one entry")
         return value
 
     @field_validator("regions")
