@@ -989,6 +989,7 @@ async def test_stop_runs_post_invoke_only_once(tmp_path, fake_creds, mocker):
     await trial._stop_agent_environment()
     await trial._stop_agent_environment()
     assert calls == ["x"]
+    assert trial._aws_post_invoke_ok is True  # Harbor's second teardown call must not clear it
 
 
 @pytest.mark.asyncio
@@ -1052,6 +1053,27 @@ async def test_post_invoke_failure_records_exception_and_still_stops(tmp_path, f
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("has_post_script", "container_started"),
+    [(False, True), (True, False)],
+    ids=["no-post-invoke-script", "container-never-started"],
+)
+async def test_post_invoke_ok_stays_false_when_post_invoke_never_ran(
+    tmp_path, fake_creds, mocker, has_post_script, container_started
+):
+    """post_invoke never ran, so nothing restored the account: the framework reset must run."""
+    trial = _make_trial(tmp_path, post_invoke=_phase(), has_post_script=has_post_script)
+    trial._agent_container_started = container_started
+    runner = mocker.patch.object(aws_trial, "ScriptRunner", autospec=True)
+    mocker.patch.object(Trial, "_stop_agent_environment", AsyncMock())
+
+    await trial._stop_agent_environment()
+
+    runner.return_value.run.assert_not_awaited()  # the gate held
+    assert trial._aws_post_invoke_ok is False
+
+
+@pytest.mark.asyncio
 async def test_post_invoke_cancellation_records_without_reraising(tmp_path, fake_creds, mocker):
     """A cancelled post-invoke is recorded but not re-raised, so finalization continues.
 
@@ -1073,6 +1095,7 @@ async def test_post_invoke_cancellation_records_without_reraising(tmp_path, fake
     recorded.assert_called_once()
     assert isinstance(recorded.call_args.args[0], asyncio.CancelledError)
     stopped.assert_awaited_once()  # base teardown still ran
+    assert trial._aws_post_invoke_ok is False  # interrupted: the framework reset must still run
 
 
 def test_init_sets_aws_attrs_before_base_init(tmp_path, mocker):
@@ -1096,6 +1119,7 @@ def test_init_sets_aws_attrs_before_base_init(tmp_path, mocker):
     # The subclass set these before delegating to the (now-failed) base init.
     assert trial._aws_placeholders == {}
     assert trial._aws_post_invoke_done is False
+    assert trial._aws_post_invoke_ok is False
 
 
 # --- post-trial reset -------------------------------------------------------
@@ -1128,7 +1152,7 @@ def _reset_ready_trial(tmp_path, *, mode, skip_framework_reset=False, post_invok
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("flag", "post_invoke_ok", "skipped"),
-    [(True, True, True), (True, False, False), (False, True, False)],
+    [(True, True, True), (True, False, False), (False, True, False), (False, False, False)],
 )
 async def test_reset_skips_framework_reset_only_after_post_invoke_succeeds(
     tmp_path, mocker, flag, post_invoke_ok, skipped

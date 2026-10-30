@@ -172,11 +172,13 @@ class AwsBenchSingleStepTrial(SingleStepTrial):
 
         Runs the env-side recovery flow (reset.sh, infra diff/restore, redeploy +
         re-snapshot on un-revertable stacks), writing under
-        ``<trial_dir>/scenario-reset-<trial_name>/``. The reset trial name (and
-        thus the scenario container name) is suffixed with the invoking trial name
-        so concurrent resets of different scenarios never collide on one Docker
-        daemon. A reset failure is logged, never raised: it must not fail a
-        finished benchmark. Only cancellation propagates.
+        ``<trial_dir>/scenario-reset-<trial_name>/``. When the task sets
+        ``skip_framework_reset`` and its post_invoke exited 0, only reset.sh (if any)
+        runs. The reset trial name (and thus the scenario container name) is
+        suffixed with the invoking trial name so concurrent resets of different
+        scenarios never collide on one Docker daemon. A reset failure is logged,
+        never raised: it must not fail a finished benchmark. Only cancellation
+        propagates.
         """
         reset_config = ScenarioTrialConfig(
             scenario=self.config.scenario,
